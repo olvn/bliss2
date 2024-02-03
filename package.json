@@ -1,0 +1,17 @@
+{
+  "name": "bliss",
+  "version": "2.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^9.4.0",
+    "better-sqlite3-session-store": "^0.1.0",
+    "express": "^4.18.2",
+    "express-session": "^1.18.0"
+  }
+}
