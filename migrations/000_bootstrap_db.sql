@@ -35,13 +35,6 @@ CREATE TABLE routes (
     FOREIGN KEY(structure_id) REFERENCES structures(structure_id),
     FOREIGN KEY(user_id) REFERENCES users(user_id)
 );
-CREATE TABLE migrations (
-    migration_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    db_id INTEGER,
-    sql_content TEXT NOT NULL,
-    name TEXT NOT NULL,
-    FOREIGN KEY(db_id) REFERENCES dbs(db_id)
-);
 CREATE TABLE structure_dbs (
     db_id INTEGER,
     structure_id INTEGER,
@@ -56,4 +49,3 @@ CREATE TABLE structure_templates (
     FOREIGN KEY(template_id) REFERENCES templates(template_id),
     FOREIGN KEY(structure_id) REFERENCES structures(structure_id)
 );
-a

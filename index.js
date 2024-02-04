@@ -27,11 +27,14 @@ function applyMigrations() {
         );
     `);
 
+
     const migrationsDir = path.join(__dirname, '/migrations');
     const migrationFiles = fs.readdirSync(migrationsDir).filter(file => file.endsWith('.sql'));
 
     migrationFiles.forEach(file => {
         const isApplied = db.prepare('SELECT filename FROM migrations WHERE filename = ?').get(file);
+
+      console.log(!isApplied, file)
         if (!isApplied) {
             const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
             db.exec(sql);
