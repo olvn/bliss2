@@ -1,0 +1,10 @@
+<form action="/register" method="POST">
+    <input name="username" placeholder="username">
+    <input name="password" placeholder="password">
+    <button type="submit">
+        move in
+    </button>
+    <% if (error) { %>
+    <%= error %>
+    <% } %>
+</form>

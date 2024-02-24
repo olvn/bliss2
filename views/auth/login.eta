@@ -1,0 +1,12 @@
+<form action="/login" method="POST">
+    <input name="username" placeholder="username">
+    <input name="password" placeholder="password">
+    <button type="submit">
+        come home
+    </button>
+    <% if (error) { %>
+    <%= error %>
+    <% } %>
+    <br>
+    <div> or you can <a href="/register">move in here</a>.
+</form>

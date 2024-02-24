@@ -1,0 +1,29 @@
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://unpkg.com/xp.css">
+</head>
+
+<body>
+    <div class="flex flex-col w-full h-full window">
+        <div class="title-bar">
+            <div class="title-bar-text">Workshop - <%- include('/workshop/structure_name', {structure: it.structure}) %>
+            </div>
+        </div>
+        <div class="flex flex-grow window-body">
+            <div id="left-pane" class="flex w-1/2 bg-blue-500 h-full">
+                <div id="toggle" class="w-1/5 bg-red-500 h-full">
+                    <%- include('/workshop/sidebar') %>
+                </div>
+                <div id="code-area" class="flex-grow bg-black h-full">
+                </div>
+
+            </div>
+
+            <div id="preview-area" class="w-1/2 bg-green-500 h-full">
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

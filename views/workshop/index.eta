@@ -1,0 +1,24 @@
+<html>
+    <head>
+        <script src="https://unpkg.com/htmx.org"></script>
+        <script src="https://unpkg.com/hyperscript.org"></script>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body>
+        <button _="on click toggle .hidden on #new-structure">+ new structure</button>
+        <div id="new-structure" class="hidden">
+            <form action="/workshop" method="POST">
+                <label for="name">come up with a name for your structure and enter it here.</label>
+                <input name="name">
+                <button type="submit">
+                    erect structure
+                </button>
+            </form>
+        </div>
+        <% structures.map(structure => { %>
+        <a href="/workshop/<%= structure.id %>">
+            <%= structure.name %>
+        </a>
+        <% }) %>
+    </body>
+</html>

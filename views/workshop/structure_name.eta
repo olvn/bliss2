@@ -1,0 +1,2 @@
+<div id="name" _="">structure<%= it.structure.name %><div _="on click toggle .hidden on me then toggle .hidden on the next <div/>">✎</div></div>
+<div class="hidden" _=""><input placeholder="structure name" value="<%= it.structure.name %>"></div>
