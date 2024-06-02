@@ -1,1 +1,58 @@
-sdf
+<ul class="tree-view">
+  <li>
+    <details open>
+      <summary>Routes</summary>
+      <ul>
+        <% it.routes.map(route => { %>
+        <li>
+          <a href="/workshop/<%= it.structure.id %>/route/<%= route.id %>">
+            <%= route.verb %> - <%= route.path %>
+          </a>
+        </li>
+        <% }) %>
+        <li hx-get="/workshop/<%= it.structure.id %>/new_route_modal" hx-target="#modal-zone" hx-swap="beforeend" class="cursor-pointer">
+          <strong style="color: purple">
+            + add
+          </strong>
+        </li>
+      </ul>
+    </details>
+  </li>
+  <li>
+    <details open>
+      <summary>Templates</summary>
+      <ul>
+        <% it.templates.map(template => { %>
+        <li>
+          <%= template.alias %>
+        </li>
+        <% }) %>
+        <li hx-get="/workshop/<%= it.structure.id %>/new_template_modal" hx-target="#modal-zone" hx-swap="beforeend" class="cursor-pointer">
+          <strong style="color: purple">
+            + add
+          </strong>
+        </li>
+      </ul>
+    </details>
+  </li>
+  <li>
+    <details open>
+      <summary>DBs</summary>
+      <ul>
+        <% it.dbs.map(db => { %>
+        <li class="<% if (it.db?.id == db.id) { %>font-bold text-green-800<% } %>">
+            <a href="/workshop/<%= it.structure.id %>/db/<%= db.id %>">
+          <%= db.alias %>
+          </a>
+        </li>
+        <% }) %>
+        <li hx-get="/workshop/<%= it.structure.id %>/new_db_modal" hx-target="#modal-zone" hx-swap="beforeend" class="cursor-pointer">
+          <strong style="color: purple">
+            + add
+          </strong>
+        </li>
+      </ul>
+    </details>
+  </li>
+</ul>
+<div id="modal-zone" style="z-index: 1000000;"></div>

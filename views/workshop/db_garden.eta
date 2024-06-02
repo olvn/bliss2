@@ -1,0 +1,79 @@
+<html>
+
+<head>
+  <link rel="stylesheet" href="/css/xp.css">
+  <script src="/js/ace/ace.js" type="text/javascript" charset="utf-8"></script>
+</head>
+
+<body>
+  <div class="flex flex-col w-full h-full window">
+    <div class="title-bar">
+      <div class="title-bar-text">Workshop - <%~ include('/workshop/structure_name', {structure: it.structure}) %>
+      </div>
+    </div>
+    <div class="flex flex-row flex-grow window-body">
+      <div class="w-1/5 h-full">
+        <%~ include('/workshop/sidebar', it) %>
+      </div>
+      <div id="main-editor" class="flex flex-grow">
+        <div id="left-pane" class="w-1/2 flex-grow h-full flex flex-col">
+          <h1>LIBRARY</h1>
+          <div id="library-editor" class="w-full flex-grow"><%= it.db.library %></div>
+          <button id="save-library" type="submit">Save</button>
+        </div>
+        <div id="preview-area" class="w-1/2 h-full flex flex-col">
+          <h1>REPL</h1>
+          <div id="repl-editor" class="w-full h-1/2">// evaluate code in here
+          </div>
+          <button id="send-repl">RUN</button>
+            <pre id="console-output" class="flex-grow h-full overflow-scroll">stuff goes here</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    var libraryEditor = ace.edit("library-editor");
+    libraryEditor.setTheme("ace/theme/monokai");
+    libraryEditor.session.setMode("ace/mode/javascript");
+
+    var replEditor = ace.edit("repl-editor")
+    replEditor.setTheme("ace/theme/monokai");
+    replEditor.session.setMode("ace/mode/javascript");
+
+    document.getElementById('save-library').onclick = function() {
+      fetch('/workshop/<%= it.structure.id %>/db/<%= it.db.id %>/library', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          library: libraryEditor.getValue()
+        }).toString()
+      }).then(response => {
+        response.text().then((val) => {
+          document.getElementById("console-output").innerHTML = val;
+        })
+      });
+    };
+
+    document.getElementById('send-repl').onclick = function() {
+      fetch('/workshop/<%= it.structure.id %>/db/<%= it.db.id %>/repl', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          code: replEditor.getValue()
+        }).toString()
+      }).then(response => {
+        response.text().then((val) => {
+          document.getElementById("console-output").innerHTML = val;
+        })
+      });
+    };
+  </script>
+
+</body>
+
+</html>

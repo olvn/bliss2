@@ -4,7 +4,7 @@
     <button type="submit">
         come home
     </button>
-    <% if (error) { %>
+    <% if (it.error) { %>
     <%= error %>
     <% } %>
     <br>

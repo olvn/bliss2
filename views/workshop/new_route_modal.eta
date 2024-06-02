@@ -1,0 +1,41 @@
+<div class="fixed inset-0 flex items-center justify-center z-10" _="on closeModal remove me">
+  <div class="window max-w-[768px]">
+    <div class="title-bar">
+      <div class="title-bar-text">Create Route</div>
+      <div class="title-bar-controls">
+        <button aria-label="Close" _="on click trigger closeModal"></button>
+      </div>
+    </div>
+    <div class="window-body">
+      <form hx-post="/workshop/<%= it.structure.id %>/route" hx-target="#response">
+        <div class="field-row-stacked" style="width: 200px">
+          <label for="path">Path (e.g. /foo/bar)</label>
+          <input name="path" id="name" type="text" />
+        </div>
+        <fieldset>
+          <legend>verb</legend>
+          <div class="field-row">
+            <input id="get" checked type="radio" name="verb" value="GET">
+            <label for="get">GET</label>
+          </div>
+          <div class="field-row">
+            <input id="post" type="radio" name="verb" value="POST">
+            <label for="post">POST</label>
+          </div>
+          <div class="field-row">
+            <input id="patch" type="radio" name="verb" value="PATCH">
+            <label for="patch">PATCH</label>
+          </div>
+          <div class="field-row">
+            <input id="delete" type="radio" name="verb" value="DELETE">
+            <label for="delete">DELETE</label>
+          </div>
+        </fieldset>
+        <section class="field-row" style="justify-content: flex-end">
+          <button type="submit">OK</button>
+          <button type="button" _="on click trigger closeModal">Cancel</button>
+        </section>
+      </form>
+      <div id="response"></div>
+    </div>
+  </div>

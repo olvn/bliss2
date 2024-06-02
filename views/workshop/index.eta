@@ -6,7 +6,7 @@
     </head>
     <body>
         <button _="on click toggle .hidden on #new-structure">+ new structure</button>
-        <div id="new-structure" class="hidden">
+        <div id="new-structure" class="hhiddenn">
             <form action="/workshop" method="POST">
                 <label for="name">come up with a name for your structure and enter it here.</label>
                 <input name="name">
@@ -15,7 +15,7 @@
                 </button>
             </form>
         </div>
-        <% structures.map(structure => { %>
+        <% it.structures.map(structure => { %>
         <a href="/workshop/<%= structure.id %>">
             <%= structure.name %>
         </a>

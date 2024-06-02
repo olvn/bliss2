@@ -1,0 +1,61 @@
+<html>
+
+<head>
+  <link rel="stylesheet" href="/css/xp.css">
+  <script src="/js/ace/ace.js" type="text/javascript" charset="utf-8"></script>
+</head>
+
+<body>
+  <div class="flex flex-col w-full h-full window">
+    <div class="title-bar">
+      <div class="title-bar-text">Workshop - <%~ include('/workshop/structure_name', {structure: it.structure}) %>
+      </div>
+    </div>
+    <div class="flex flex-row flex-grow window-body">
+      <div class="w-1/5 h-full">
+        <%~ include('/workshop/sidebar', it) %>
+      </div>
+      <div id="main-editor" class="flex flex-grow">
+        <div id="left-pane" class="w-1/2 flex-grow h-full flex flex-col">
+          <div id="editor" class="w-full flex-grow"><%= it.route.handler %></div>
+          <button id="save-btn" type="submit">Save</button>
+        </div>
+        <div id="preview-area" class="w-1/2 h-full flex flex-col">
+          <form _="on submit halt the event then set #preview's contentWindow.location.href to #url's value">
+            <input id="url" class="w-full">
+          </form>
+          <iframe id="preview" 
+                  src="<%= it.previewUrl %>" 
+                  class="w-full flex-grow"
+                  _="on load set #url's value to my contentWindow.location.href">
+          </iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/monokai");
+    editor.session.setMode("ace/mode/javascript");
+
+    document.getElementById('save-btn').onclick = function() {
+      fetch('/workshop/<%= it.structure.id %>/route/<%= it.route.id %>', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: new URLSearchParams({
+          handler: editor.getValue()
+        }).toString()
+      }).then(response => {
+        if (response.ok) {
+          document.getElementById('preview').contentWindow.location.reload()
+        }
+      });
+    };
+
+  </script>
+
+</body>
+
+</html>

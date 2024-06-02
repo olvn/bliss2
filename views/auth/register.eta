@@ -4,7 +4,7 @@
     <button type="submit">
         move in
     </button>
-    <% if (error) { %>
+    <% if (it.error) { %>
     <%= error %>
     <% } %>
 </form>
