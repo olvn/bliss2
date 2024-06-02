@@ -24,7 +24,9 @@
       <ul>
         <% it.templates.map(template => { %>
         <li>
-          <%= template.alias %>
+          <a href="/workshop/<%= it.structure.id %>/template/<%= template.id %>">
+            <%= template.name %>
+          </a>
         </li>
         <% }) %>
         <li hx-get="/workshop/<%= it.structure.id %>/new_template_modal" hx-target="#modal-zone" hx-swap="beforeend" class="cursor-pointer">
@@ -41,8 +43,8 @@
       <ul>
         <% it.dbs.map(db => { %>
         <li class="<% if (it.db?.id == db.id) { %>font-bold text-green-800<% } %>">
-            <a href="/workshop/<%= it.structure.id %>/db/<%= db.id %>">
-          <%= db.alias %>
+          <a href="/workshop/<%= it.structure.id %>/db/<%= db.id %>">
+            <%= db.alias %>
           </a>
         </li>
         <% }) %>

@@ -32,13 +32,13 @@ CREATE TABLE templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     content TEXT,
-    user_id INTEGER,
     structure_id INTEGER,
+    test_object TEXT DEFAULT "it = {}",
     engine TEXT NOT NULL DEFAULT "eta",
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(user_id) REFERENCES users(id),
     FOREIGN KEY(structure_id) REFERENCES structures(id)
+    UNIQUE(name, structure_id)
 );
 
 CREATE TABLE routes (

@@ -3,6 +3,7 @@ const vm = require("node:vm");
 const path = require("path");
 const express = require("express");
 const session = require("express-session");
+const fileUpload = require("express-fileupload");
 const SQLiteStore = require("better-sqlite3-session-store")(session);
 const betterSqlite3 = require("better-sqlite3");
 const { Eta } = require("eta");
@@ -20,6 +21,7 @@ const routes = { GET: [], POST: [], PUT: [], DELETE: [] };
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
+app.use(fileUpload());
 
 const db = betterSqlite3("./prime.db");
 
@@ -209,10 +211,40 @@ function updateDb(db, appDb) {
   db.prepare(sql).run(...values);
 }
 
+function updateTemplate(db, template) {
+  const fields = ["content", "name", "test_object"];
+  const values = fields.map((field) => template[field]);
+  const placeholders = fields.map((field) => `${field} = ?`).join(", ");
+
+  const sql = `UPDATE templates SET ${placeholders} WHERE id = ?`;
+  values.push(template.id);
+  db.prepare(sql).run(...values);
+}
+
 function getTemplates(db, structureId) {
   return db
     .prepare("SELECT * from templates where structure_id = ?")
     .all(structureId);
+}
+
+function getTemplate(db, templateId) {
+  return db.prepare("SELECT * from templates where id = ?").get(templateId);
+}
+
+function getTemplateContentByName(db, structId, name) {
+  return db
+    .prepare(
+      "SELECT content from templates where structure_id = ? AND name = ?"
+    )
+    .get(structId, name);
+}
+
+function createTemplate(db, structureId, name, content, testObjectString) {
+  return db
+    .prepare(
+      "INSERT INTO templates (structure_id, name, content, test_object) VALUES (?, ?, ?, ?)"
+    )
+    .run(structureId, name, content, testObjectString).lastInsertRowid;
 }
 
 function getDbsForStructure(db, structureId) {
@@ -280,8 +312,6 @@ function createDb(db, structId, name) {
 }
 
 const { LRUCache } = require("lru-cache");
-const { templateSettings } = require("dot");
-// we'll figure out max size later
 const templateCache = new LRUCache({ max: 100 });
 
 function getTemplater(structId) {
@@ -293,7 +323,7 @@ function getTemplater(structId) {
       return path;
     };
     etaInstance.readFile = function (templateAlias) {
-      return getTemplateString(db, templateAlias, structId);
+      return getTemplateContentByName(db, structId, templateAlias).content;
     };
     templateCache.set(structId, etaInstance);
   }
@@ -315,9 +345,8 @@ function getDbInstance(dbId) {
   return dbInstance;
 }
 
-function bootstrapTemplateWithHTMXetc(htmlString, blissRoute) {
-  console.log(htmlString);
-  if (htmlString.startsWith("<html>")) {
+function bootstrapTemplateWithHTMXetc(htmlString, blissRoute, wrapHTML) {
+  if (htmlString.startsWith("<html>") || wrapHTML) {
     const $ = cheerio.load(htmlString);
     let head = $("head");
 
@@ -487,6 +516,63 @@ app.post("/workshop/:structure_id/db/:db_id/repl", (req, res) => {
   }
 });
 
+app.post("/workshop/:structure_id/template", (req, res) => {
+  let name = req.body.name;
+
+  const template = createTemplate(
+    db,
+    req.params.structure_id,
+    name,
+    "<div>henlo <%= it.name %></div>",
+    "it = { name: 'templates!' };"
+  );
+
+  return smartRedirect(
+    req,
+    res,
+    `/workshop/${req.params.structure_id}/template/${template}`
+  );
+});
+
+app.put("/workshop/:structure_id/template/:template_id", (req, res) => {
+  let id = req.params.template_id;
+  let content = req.body.content;
+  let test_object = req.body.test_object;
+
+  updateTemplate(db, { ...getTemplate(db, id), content, test_object });
+
+  return res.send("good");
+});
+
+app.get("/workshop/:structure_id/template/:template_id", (req, res) => {
+  const template = getTemplate(db, req.params.template_id);
+
+  return res.send(
+    bootstrapTemplateWithHTMXetc(
+      eta.render("workshop/template", {
+        template: template,
+        ...sidebarStuff(db, req.params.structure_id),
+      })
+    )
+  );
+});
+
+app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
+  const template = getTemplate(db, req.params.template_id);
+  const eta = getTemplater(req.params.structure_id);
+
+  const context = vm.createContext({ it: null });
+  vm.runInContext(template.test_object, context);
+
+  return res.send(
+    bootstrapTemplateWithHTMXetc(
+      eta.render(template.name, context.it),
+      null,
+      true
+    )
+  );
+});
+
 app.get("/workshop/:structure_id/route/:id", (req, res) => {
   const route = getRoute(db, req.params.id);
   return res.send(
@@ -581,13 +667,16 @@ app.all("*", (req, res) => {
 
         res.rawSend = res.send;
         res.send = (...args) => {
-          console.log(args[0], args[1], "bingo")
           res.rawSend(
             bootstrapTemplateWithHTMXetc(
               args[0],
               `/workshop/${route.structure_id}/route/${route.id}`
             )
           );
+        };
+        res.render = (template, context) => {
+          const eta = getTemplater(route.structure_id);
+          res.send(bootstrapTemplateWithHTMXetc(eta.render(template, context)));
         };
         return vm.runInContext(
           (route.handler += `\n\nhandler(req, res)`),
