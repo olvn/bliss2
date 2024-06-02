@@ -252,7 +252,6 @@ function getDbForStructure(db, structureId, dbId) {
 }
 
 function createDb(db, structId, name) {
-  console.log(name, structId);
   const transaction = db.transaction(() => {
     const insertDbStmt = db.prepare(`
             INSERT INTO dbs (name, structure_id)
@@ -317,6 +316,7 @@ function getDbInstance(dbId) {
 }
 
 function bootstrapTemplateWithHTMXetc(htmlString, blissRoute) {
+  console.log(htmlString);
   if (htmlString.startsWith("<html>")) {
     const $ = cheerio.load(htmlString);
     let head = $("head");
@@ -390,7 +390,6 @@ app.get("/workshop/:structure_id", (req, res) => {
 });
 
 app.post("/workshop/:structure_id/db", (req, res) => {
-  console.log(req.session);
   const dbId = createDb(db, req.params.structure_id, req.body.name);
   const redirectUrl = `/workshop/${req.params.structure_id}/db/${dbId}`;
   return smartRedirect(req, res, redirectUrl);
@@ -416,12 +415,14 @@ app.get("/workshop/:structure_id/db/:db_id", (req, res) => {
 });
 
 app.post("/workshop/:structure_id/route", (req, res) => {
+  let path = req.body.path;
+
   const route = createRoute(
     db,
     req.body.verb,
-    req.body.path,
+    path[0] == "/" ? path : "/" + path,
     req.params.structure_id,
-    "// put your handler code here"
+    "// put your handler code here\n\nfunction handler(req, res) {\n  res.send('henlo world') \n}"
   );
   buildRoutes();
   return smartRedirect(
@@ -578,11 +579,14 @@ app.all("*", (req, res) => {
           context.module.exports = null;
         }
 
-        res.rawSend = res.send
-        res.render = (...args) => {
-          bootstrapTemplateWithHTMXetc(
-            res.rawSend(...args),
-            `/workshop/${route.structure_id}/route/${route.id}`
+        res.rawSend = res.send;
+        res.send = (...args) => {
+          console.log(args[0], args[1], "bingo")
+          res.rawSend(
+            bootstrapTemplateWithHTMXetc(
+              args[0],
+              `/workshop/${route.structure_id}/route/${route.id}`
+            )
           );
         };
         return vm.runInContext(
