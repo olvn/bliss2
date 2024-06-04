@@ -20,7 +20,7 @@ CREATE TABLE structures (
 CREATE TABLE dbs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    structure_id INTEGER,
+    structure_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     library TEXT NOT NULL DEFAULT "",
@@ -74,6 +74,16 @@ CREATE TABLE files (
     FOREIGN KEY (structure_id) REFERENCES structures(id),
     UNIQUE(path, structure_id)
 );
+
+INSERT INTO
+    structures (id, name, user_id)
+VALUES
+    (0, 'prime', NULL);
+
+INSERT INTO
+    dbs (id, name, structure_id, library)
+VALUES
+    (0, 'prime', 0, '');
 
 -- ===========================
 --         TRIGGERS

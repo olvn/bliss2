@@ -23,7 +23,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
 app.use(fileUpload());
 
-const db = betterSqlite3("./prime.db");
+const db = betterSqlite3("./dbs/0.sqlite");
 
 db.pragma("journal_mode = WAL");
 
@@ -297,11 +297,7 @@ function createDb(db, structId, name) {
         `);
     insertStructureDbStmt.run(dbId, structId, name);
 
-    const dbDir = path.join("dbs", dbId.toString());
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-    const newDbPath = path.join(dbDir, `${name}.sqlite`);
+    const newDbPath = path.join("dbs", `${dbId}.sqlite`);
     const newDb = betterSqlite3(newDbPath);
     newDb.close();
 
@@ -309,6 +305,14 @@ function createDb(db, structId, name) {
   });
 
   return transaction();
+}
+
+function attachDb(db, structId, dbId, alias) {
+  const insertStructureDbStmt = db.prepare(`
+    INSERT INTO structure_dbs (db_id, structure_id, alias)
+    VALUES (?, ?, ?)
+  `);
+  insertStructureDbStmt.run(dbId, structId, alias);
 }
 
 function getFilesForStruct(db, structureId) {
@@ -443,6 +447,12 @@ app.get("/workshop/:structure_id", (req, res) => {
 app.post("/workshop/:structure_id/db", (req, res) => {
   const dbId = createDb(db, req.params.structure_id, req.body.name);
   const redirectUrl = `/workshop/${req.params.structure_id}/db/${dbId}`;
+  return smartRedirect(req, res, redirectUrl);
+});
+
+app.post("/workshop/:structure_id/db/attach", (req, res) => {
+  attachDb(db, req.params.structure_id, req.body.db_id, req.body.alias);
+  const redirectUrl = `/workshop/${req.params.structure_id}/db/${req.body.db_id}`;
   return smartRedirect(req, res, redirectUrl);
 });
 

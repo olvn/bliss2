@@ -7,16 +7,42 @@
       </div>
     </div>
     <div class="window-body">
-      <form hx-post="/workshop/<%= it.structure.id %>/db" hx-target="#response">
-        <div class="field-row-stacked" style="width: 200px">
-          <label for="name">Name</label>
-          <input name="name" id="name" type="text" />
-        </div>
-        <section class="field-row" style="justify-content: flex-end">
-          <button type="submit">OK</button>
-          <button type="button" _="on click trigger closeModal">Cancel</button>
-        </section>
-      </form>
-      <div id="response"></div>
+      <section class="tabs" style="max-width: 500px">
+        <menu role="tablist" aria-label="Sample Tabs">
+          <button role="tab" aria-selected="true" aria-controls="new" _="on click add .hidden to #existing then remove .hidden from #new then setAttribute('aria-selected', 'true')">New</button>
+          <button role="tab" aria-controls="existing" _="on click add .hidden to #new then remove .hidden from #existing then setAttribute('aria-selected', 'true') to me">Existing</button>
+        </menu>
+        <article role="tabpanel" id="new">
+          <form hx-post="/workshop/<%= it.structure.id %>/db" hx-target="#response">
+            <div class="field-row-stacked" style="width: 200px">
+              <label for="name">Name</label>
+              <input name="name" id="name" type="text" />
+            </div>
+            <section class="field-row" style="justify-content: flex-end">
+              <button type="submit">OK</button>
+              <button type="button" _="on click trigger closeModal">Cancel</button>
+            </section>
+          </form>
+          <div id="response"></div>
+        </article>
+        <article role="tabpanel" class="hidden" id="existing">
+          <form hx-post="/workshop/<%= it.structure.id %>/db/attach" hx-target="#response">
+            <div class="field-row-stacked" style="width: 200px">
+              <label for="alias">Alias</label>
+              <input name="alias" id="alias" type="text" />
+            </div>
+            <div class="field-row-stacked" style="width: 200px">
+              <label for="db_id">DB ID</label>
+              <input name="db_id" id="db_id" type="text" />
+            </div>
+            <section class="field-row" style="justify-content: flex-end">
+              <button type="submit">OK</button>
+              <button type="button" _="on click trigger closeModal">Cancel</button>
+            </section>
+          </form>
+          <div id="response"></div>
+        </article>
+      </section>
     </div>
   </div>
+</div>
