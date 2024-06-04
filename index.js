@@ -28,7 +28,16 @@ const db = betterSqlite3("./dbs/0.sqlite");
 db.pragma("journal_mode = WAL");
 
 function getAllRoutes(db) {
-  return db.prepare("SELECT * from routes ORDER BY id ASC;").all();
+  return db
+    .prepare(
+      `
+    SELECT routes.*, structures.route_prefix 
+    FROM routes 
+    JOIN structures ON routes.structure_id = structures.id 
+    ORDER BY routes.id ASC;
+  `
+    )
+    .all();
 }
 
 app.use(
@@ -71,8 +80,11 @@ function applyMigrations() {
 
 function buildRoutes() {
   for (let route of getAllRoutes(db)) {
+    const prefix = route.route_prefix;
+    console.log(route);
+    const p = prefix ? path.join(route.route_prefix, route.path) : route.path;
     routes[route.verb].push({
-      matcher: match(route.path, { decode: decodeURIComponent }),
+      matcher: match(p, { decode: decodeURIComponent }),
       id: route.id,
       path: route.path,
     });
@@ -208,6 +220,17 @@ function updateDb(db, appDb) {
 
   const sql = `UPDATE dbs SET ${placeholders} WHERE id = ?`;
   values.push(appDb.id); // Add routeId to the end for the WHERE clause
+  db.prepare(sql).run(...values);
+}
+
+function updateStruct(db, struct) {
+  const fields = ["name", "route_prefix"];
+  console.log(struct, fields);
+  const values = fields.map((field) => struct[field]);
+  const placeholders = fields.map((field) => `${field} = ?`).join(", ");
+
+  const sql = `UPDATE structures SET ${placeholders} WHERE id = ?`;
+  values.push(struct.id); // Add routeId to the end for the WHERE clause
   db.prepare(sql).run(...values);
 }
 
@@ -371,7 +394,92 @@ function getDbInstance(dbId) {
   return dbInstance;
 }
 
-function bootstrapTemplateWithHTMXetc(htmlString, blissRoute, wrapHTML) {
+function cloneStructure(
+  structId,
+  newStructureName,
+  userId,
+  routePrefix = "",
+  cloneDb = false
+) {
+  const transaction = db.transaction(() => {
+    const cloneStructure = db.prepare(`
+            INSERT INTO structures (name, user_id, route_prefix, cloned_from)
+            VALUES (?, ?, ?, ?);
+        `);
+
+    const newStructId = cloneStructure.run(
+      newStructureName,
+      userId,
+      routePrefix,
+      structId
+    ).lastInsertRowid;
+
+    if (cloneDb) {
+      const dbIds = db
+        .prepare(`select db_id from structure_dbs where structure_id = ?;`)
+        .all(structId);
+
+      for (let { db_id } of dbIds) {
+        const newDb = db
+          .prepare(
+            `
+            INSERT INTO dbs (name, structure_id, library)
+            SELECT name, ?, library FROM dbs WHERE id = ?;
+            `
+          )
+          .run(newStructId, db_id).lastInsertRowid;
+
+        db.prepare(
+          `
+            INSERT INTO structure_dbs (db_id, structure_id, alias)
+            SELECT ?, ?, alias FROM structure_dbs WHERE db_id = ? AND structure_id = ?;
+            `
+        ).run(newDb, newStructId, db_id, structId);
+
+        db.prepare(`select id from dbs where structure_id = ?`)
+          .all(newStructId)
+          .map((new_db) => {
+            console.log(db_id, new_db.id);
+            const srcPath = path.join(__dirname, "dbs", `${db_id}.sqlite`);
+            const destPath = path.join(__dirname, "dbs", `${new_db.id}.sqlite`);
+            fs.copyFileSync(srcPath, destPath);
+            fs.copyFileSync(srcPath + "-shm", destPath + "-shm");
+            fs.copyFileSync(srcPath + "-wal", destPath + "-wal");
+          });
+      }
+    } else {
+      db.prepare(
+        `
+        INSERT INTO structure_dbs (db_id, structure_id, alias)
+        SELECT db_id, ?, alias FROM structure_dbs WHERE structure_id = ?;
+        `
+      ).run(newStructId, structId);
+    }
+    const cloneTemplates = db.prepare(`
+            INSERT INTO templates (name, content, structure_id, test_object, engine)
+            SELECT name, content, ?, test_object, engine FROM templates WHERE structure_id = ?;
+        `);
+    cloneTemplates.run(newStructId, structId);
+
+    const cloneRoutes = db.prepare(`
+            INSERT INTO routes (verb, path, structure_id, handler)
+            SELECT verb, path, ?, handler FROM routes WHERE structure_id = ?;
+        `);
+    cloneRoutes.run(newStructId, structId);
+
+    return newStructId;
+  });
+
+  return transaction();
+}
+
+function bootstrapTemplateWithHTMXetc(
+  htmlString,
+  blissRoute,
+  blissClone,
+  blissCopy,
+  wrapHTML
+) {
   if (htmlString.startsWith("<html>") || wrapHTML) {
     const $ = cheerio.load(htmlString);
     let head = $("head");
@@ -390,13 +498,18 @@ function bootstrapTemplateWithHTMXetc(htmlString, blissRoute, wrapHTML) {
     `);
 
     if (blissRoute) {
-      $.root().children().attr("data-bliss-route", blissRoute);
+      $("body").attr("data-bliss-route", blissRoute);
+      $("body").attr("data-bliss-clone", blissClone);
+      if (blissCopy) $("body").attr("data-bliss-copy", blissCopy);
     }
 
     htmlString = $.html();
   } else if (blissRoute) {
     const $ = cheerio.load(htmlString, null, false);
     $.root().children().attr("data-bliss-route", blissRoute);
+    $.root().children().attr("data-bliss-clone", blissClone);
+    if (blissCopy) $.root().children().attr("data-bliss-copy", blissCopy);
+    console.log(blissCopy, "fleem")
     htmlString = $.html();
   }
 
@@ -444,6 +557,27 @@ app.get("/workshop/:structure_id", (req, res) => {
   );
 });
 
+app.post("/workshop/:structure_id/clone", (req, res) => {
+  let routePrefix = req.body.route_prefix;
+  routePrefix = routePrefix[0] == "/" ? routePrefix : "/" + routePrefix;
+  const cloneDb = req.body.clone_db == "true";
+  let newStructureId;
+  try {
+    newStructureId = cloneStructure(
+      req.params.structure_id,
+      req.body.name,
+      1,
+      // req.session.userId,
+      routePrefix,
+      cloneDb
+    );
+    buildRoutes();
+  } catch (e) {
+    return res.send(e.stack);
+  }
+  return smartRedirect(req, res, `/workshop/${newStructureId}`);
+});
+
 app.post("/workshop/:structure_id/db", (req, res) => {
   const dbId = createDb(db, req.params.structure_id, req.body.name);
   const redirectUrl = `/workshop/${req.params.structure_id}/db/${dbId}`;
@@ -485,6 +619,7 @@ app.post("/workshop/:structure_id/route", (req, res) => {
     req.params.structure_id,
     "// put your handler code here\n\nfunction handler(req, res) {\n  res.send('henlo world') \n}"
   );
+  // todo optimize by only adding new, don't just rebuild all
   buildRoutes();
   return smartRedirect(
     req,
@@ -591,14 +726,21 @@ app.get("/workshop/:structure_id/template/:template_id", (req, res) => {
 
 app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
   const template = getTemplate(db, req.params.template_id);
+  const struct = getStructure(db, req.params.structure_id);
   const eta = getTemplater(req.params.structure_id);
 
   const context = vm.createContext({ it: null });
   vm.runInContext(template.test_object, context);
 
+  context.it.route = function (url) {
+    return struct.route_prefix ? path.join(struct.route_prefix, url) : url;
+  };
+
   return res.send(
     bootstrapTemplateWithHTMXetc(
       eta.render(template.name, context.it),
+      null,
+      null,
       null,
       true
     )
@@ -607,11 +749,15 @@ app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
 
 app.get("/workshop/:structure_id/route/:id", (req, res) => {
   const route = getRoute(db, req.params.id);
+  const routePrefix = getStructure(db, req.params.structure_id).route_prefix;
   return res.send(
     bootstrapTemplateWithHTMXetc(
       eta.render("workshop/route", {
         route: route,
-        previewUrl: route["verb"] == "GET" ? route.path : "/workshop/tip",
+        previewUrl:
+          route["verb"] == "GET"
+            ? path.join(routePrefix, route.path)
+            : "/workshop/tip",
         ...sidebarStuff(db, req.params.structure_id),
       })
     )
@@ -682,6 +828,25 @@ app.get("/workshop/:structure_id/files", (req, res) => {
   );
 });
 
+app.get("/workshop/:structure_id/settings", (req, res) => {
+  return res.send(
+    bootstrapTemplateWithHTMXetc(
+      eta.render("workshop/settings", {
+        ...sidebarStuff(db, req.params.structure_id),
+      })
+    )
+  );
+});
+
+app.put("/workshop/:structure_id/settings", (req, res) => {
+  let structId = req.params.structure_id;
+  let struct = getStructure(db, structId);
+  updateStruct(db, { ...struct, route_prefix: req.body.route_prefix });
+  struct = getStructure(db, structId);
+
+  res.send("success!");
+});
+
 app.get("/workshop/:structure_id/new_template_modal", (req, res) => {
   return res.send(
     bootstrapTemplateWithHTMXetc(
@@ -712,15 +877,31 @@ app.get("/workshop/:structure_id/new_db_modal", (req, res) => {
   );
 });
 
+app.get("/workshop/:structure_id/clone_modal", (req, res) => {
+  const structure = getStructure(db, req.params.structure_id);
+  return res.send(
+    bootstrapTemplateWithHTMXetc(
+      eta.render("workshop/clone_structure_modal", {
+        structure,
+        defaultRoutePrefix: path.join(structure.route_prefix || "", "clone"),
+      })
+    )
+  );
+});
+
+function embedHTML(url) {
+  return `<div hx-get="${url}" hx-trigger="load"></div>`;
+}
+
 app.all("*", (req, res) => {
-  const path = req.path;
+  const req_path = req.path;
   const verb = req.method;
 
   try {
     let routeMatch = null;
 
     for (let { matcher, id } of routes[verb]) {
-      let matchFromRoute = matcher(path);
+      let matchFromRoute = matcher(req_path);
       if (matchFromRoute) {
         routeMatch = { params: matchFromRoute.params, id: id };
       }
@@ -733,6 +914,7 @@ app.all("*", (req, res) => {
         .get(routeMatch.id);
 
       let dbs = getDbsForStructure(db, route.structure_id);
+      let __urlPrefix = getStructure(db, route.structure_id).route_prefix;
 
       const allDbInstances = {};
 
@@ -762,13 +944,26 @@ app.all("*", (req, res) => {
           res.rawSend(
             bootstrapTemplateWithHTMXetc(
               args[0],
-              `/workshop/${route.structure_id}/route/${route.id}`
+              `/workshop/${route.structure_id}/route/${route.id}`,
+              `/workshop/${route.structure_id}/clone/`,
+              verb == "GET" ? embedHTML(req.originalUrl) : null
             )
           );
         };
         res.render = (template, context) => {
+          context.route = function (url) {
+            return __urlPrefix ? path.join(__urlPrefix, url) : url;
+          };
           const eta = getTemplater(route.structure_id);
-          res.send(bootstrapTemplateWithHTMXetc(eta.render(template, context)));
+          console.log(route.method, "\n\n\n");
+          res.rawSend(
+            bootstrapTemplateWithHTMXetc(
+              eta.render(template, context),
+              `/workshop/${route.structure_id}/route/${route.id}`,
+              `/workshop/${route.structure_id}/clone_modal/`,
+              verb == "GET" ? embedHTML(req.originalUrl) : null
+            )
+          );
         };
         return vm.runInContext(
           (route.handler += `\n\nhandler(req, res)`),

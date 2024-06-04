@@ -11,9 +11,12 @@ CREATE TABLE structures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     user_id INTEGER,
+    route_prefix TEXT,
+    cloned_from INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(user_id) REFERENCES users(id),
+    FOREIGN KEY(cloned_from) REFERENCES structures(id),
     UNIQUE(name, user_id)
 );
 

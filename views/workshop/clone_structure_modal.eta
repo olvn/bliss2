@@ -1,0 +1,24 @@
+<div class="fixed inset-0 flex items-center justify-center z-10 " _="on closeModal remove me">
+  <div class="bg-white rounded-md border border-black p-2">
+    <div class="text-lg">Clone Structure</div>
+    <form hx-post="/workshop/<%= it.structure.id %>/clone" hx-target="#response" class="flex flex-col gap-2">
+      <div class="flex flex-col">
+        <label class="text-xs">Name</label>
+        <input name="name" id="name" type="text" value="<%= it.structure.name %> clone" />
+      </div>
+      <div class="flex flex-col">
+        <label class="text-xs">Route Prefix</label>
+        <input name="route_prefix" id="route_prefix" type="text" value="<%= it.defaultRoutePrefix %>" />
+      </div>
+      <div class="flex gap-2">
+        <input id="default-checkbox" type="checkbox" name="cloneDBs" value="true">
+        <label class="text-xs">Clone DBs</label>
+      </div>
+      <section class="flex flex-end gap-2" style="justify-content: flex-end">
+        <button class="bg-green-500 rounded p-2 hover:bg-green-700 text-white" type="submit">Clone</button>
+        <button class="bg-gray-400 rounded p-2 hover:bg-gray-700 text-white" type="button" _="on click trigger closeModal">Cancel</button>
+      </section>
+    </form>
+    <div id="response"></div>
+  </div>
+</div>
