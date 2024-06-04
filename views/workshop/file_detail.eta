@@ -1,0 +1,1 @@
+<li><%= it.file.name %> &nbsp;&nbsp;&nbsp;<input value="<%= it.file.url %>"></input></li>

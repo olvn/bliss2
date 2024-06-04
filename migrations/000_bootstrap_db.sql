@@ -37,8 +37,7 @@ CREATE TABLE templates (
     engine TEXT NOT NULL DEFAULT "eta",
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(structure_id) REFERENCES structures(id)
-    UNIQUE(name, structure_id)
+    FOREIGN KEY(structure_id) REFERENCES structures(id) UNIQUE(name, structure_id)
 );
 
 CREATE TABLE routes (
@@ -57,47 +56,89 @@ CREATE TABLE structure_dbs (
     db_id INTEGER,
     structure_id INTEGER,
     alias TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(db_id, structure_id),
     FOREIGN KEY(db_id) REFERENCES dbs(id),
     FOREIGN KEY(structure_id) REFERENCES structures(id)
 );
 
+CREATE TABLE files (
+    id INTEGER PRIMARY KEY,
+    structure_id INTEGER,
+    name TEXT,
+    path TEXT,
+    mime_type TEXT,
+    mime_subtype TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (structure_id) REFERENCES structures(id),
+    UNIQUE(path, structure_id)
+);
 
 -- ===========================
 --         TRIGGERS
 -- ===========================
-
 CREATE TRIGGER update_users_updated_at
-AFTER UPDATE ON users
-FOR EACH ROW
-BEGIN
-    UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+AFTER
+UPDATE
+    ON users FOR EACH ROW BEGIN
+UPDATE
+    users
+SET
+    updated_at = CURRENT_TIMESTAMP
+WHERE
+    id = OLD.id;
+
 END;
 
 CREATE TRIGGER update_structures_updated_at
-AFTER UPDATE ON structures
-FOR EACH ROW
-BEGIN
-    UPDATE structures SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+AFTER
+UPDATE
+    ON structures FOR EACH ROW BEGIN
+UPDATE
+    structures
+SET
+    updated_at = CURRENT_TIMESTAMP
+WHERE
+    id = OLD.id;
+
 END;
 
 CREATE TRIGGER update_dbs_updated_at
-AFTER UPDATE ON dbs
-FOR EACH ROW
-BEGIN
-    UPDATE dbs SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+AFTER
+UPDATE
+    ON dbs FOR EACH ROW BEGIN
+UPDATE
+    dbs
+SET
+    updated_at = CURRENT_TIMESTAMP
+WHERE
+    id = OLD.id;
+
 END;
 
 CREATE TRIGGER update_templates_updated_at
-AFTER UPDATE ON templates
-FOR EACH ROW
-BEGIN
-    UPDATE templates SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+AFTER
+UPDATE
+    ON templates FOR EACH ROW BEGIN
+UPDATE
+    templates
+SET
+    updated_at = CURRENT_TIMESTAMP
+WHERE
+    id = OLD.id;
+
 END;
 
 CREATE TRIGGER update_routes_updated_at
-AFTER UPDATE ON routes
-FOR EACH ROW
-BEGIN
-    UPDATE routes SET updated_at = CURRENT_TIMESTAMP WHERE id = OLD.id;
+AFTER
+UPDATE
+    ON routes FOR EACH ROW BEGIN
+UPDATE
+    routes
+SET
+    updated_at = CURRENT_TIMESTAMP
+WHERE
+    id = OLD.id;
+
 END;

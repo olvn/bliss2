@@ -56,5 +56,8 @@
       </ul>
     </details>
   </li>
+  <li>
+    <a href="/workshop/<%= it.structure.id %>/files">Files</a>
+  </li>
 </ul>
 <div id="modal-zone" style="z-index: 1000000;"></div>

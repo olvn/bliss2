@@ -311,6 +311,28 @@ function createDb(db, structId, name) {
   return transaction();
 }
 
+function getFilesForStruct(db, structureId) {
+  let test = db
+    .prepare("SELECT * FROM files WHERE structure_id = ? ORDER BY id DESC")
+    .all(structureId);
+
+  console.log(db.prepare("PRAGMA table_info(files)").all());
+
+  return test;
+}
+
+function getFile(db, fileId) {
+  return db.prepare("SELECT * FROM files WHERE id = ?").get(fileId);
+}
+
+function createFile(db, structure_id, name, filePath, mime_type, mime_subtype) {
+  return db
+    .prepare(
+      "INSERT INTO files (structure_id, name, path, mime_type, mime_subtype) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(structure_id, name, filePath, mime_type, mime_subtype).lastInsertRowid;
+}
+
 const { LRUCache } = require("lru-cache");
 const templateCache = new LRUCache({ max: 100 });
 
@@ -586,8 +608,68 @@ app.get("/workshop/:structure_id/route/:id", (req, res) => {
   );
 });
 
-app.get("/workshop/tip", (req, res) => {
-  res.send("try entering something in the url field above");
+// POST route to handle file upload
+app.post("/workshop/:structure_id/files", (req, res) => {
+  if (!req.files || Object.keys(req.files).length === 0) {
+    return res.status(400).send("failed to upload that file");
+  }
+
+  const { structure_id } = req.params;
+  const file = req.files.file;
+  const name = file.name;
+  const [mime_type, mime_subtype] = file.mimetype.split("/");
+  const uploadPath = path.join(__dirname, "public", structure_id);
+  const storedPath = path.join(structure_id, file.name);
+
+  fs.mkdirSync(uploadPath, { recursive: true });
+
+  file.mv(path.join(uploadPath, name), (err) => {
+    try {
+      if (err) {
+        return res.status(500).send(err);
+      }
+
+      let id = createFile(
+        db,
+        structure_id,
+        name,
+        storedPath,
+        mime_type,
+        mime_subtype
+      );
+
+      let file = getFile(db, id);
+      file.url = prefixUrlWithHost(req, file.path);
+
+      return res.send(eta.render("workshop/file_detail", { file: file }));
+    } catch (e) {
+      res.status(500);
+      return res.send(e);
+    }
+  });
+});
+
+function prefixUrlWithHost(req, path) {
+  return req.protocol + "://" + req.get("host") + "/" + path;
+}
+
+// POST route to handle file upload
+app.get("/workshop/:structure_id/files", (req, res) => {
+  const { structure_id } = req.params;
+
+  const files = getFilesForStruct(db, structure_id);
+  files.map((it) => {
+    it.url = prefixUrlWithHost(req, it.path);
+  });
+
+  return res.send(
+    bootstrapTemplateWithHTMXetc(
+      eta.render("workshop/files", {
+        files,
+        ...sidebarStuff(db, structure_id),
+      })
+    )
+  );
 });
 
 app.get("/workshop/:structure_id/new_template_modal", (req, res) => {
