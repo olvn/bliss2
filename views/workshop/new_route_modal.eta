@@ -10,7 +10,7 @@
       <form hx-post="/workshop/<%= it.structure.id %>/route" hx-target="#response">
         <div class="field-row-stacked" style="width: 300px">
           <label for="path">Path (e.g. /foo/bar)</label>
-          <div class="flex items-center"><%= it.structure.route_prefix %>/<input name="path" id="name" type="text" class="flex-grow" /></div>
+          <div class="flex items-center"><%= it.structure.route_prefix || "" %>/<input name="path" id="name" type="text" class="flex-grow" /></div>
         </div>
         <fieldset>
           <legend>verb</legend>
@@ -29,6 +29,10 @@
           <div class="field-row">
             <input id="delete" type="radio" name="verb" value="DELETE">
             <label for="delete">DELETE</label>
+          </div>
+          <div class="field-row">
+            <input id="ws" type="radio" name="verb" value="WS">
+            <label for="ws">WS</label>
           </div>
         </fieldset>
         <section class="field-row" style="justify-content: flex-end">

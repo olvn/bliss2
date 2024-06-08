@@ -46,10 +46,11 @@ CREATE TABLE templates (
 
 CREATE TABLE routes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    verb TEXT CHECK(verb IN ('POST', 'GET', 'PUT', 'DELETE')) NOT NULL,
+    verb TEXT CHECK(verb IN ('POST', 'GET', 'PUT', 'DELETE', 'WS')) NOT NULL,
     path TEXT NOT NULL,
     structure_id INTEGER,
     handler TEXT NOT NULL,
+    error TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(structure_id) REFERENCES structures(id),

@@ -8,9 +8,11 @@ const SQLiteStore = require("better-sqlite3-session-store")(session);
 const betterSqlite3 = require("better-sqlite3");
 const { Eta } = require("eta");
 const { match } = require("path-to-regexp");
+const { LRUCache } = require("lru-cache");
 const bcrypt = require("bcrypt");
 const cheerio = require("cheerio");
 const app = express();
+const _expressWs = require("express-ws")(app);
 const bodyParser = require("body-parser");
 const PORT = 3000;
 
@@ -26,6 +28,20 @@ app.use(fileUpload());
 const db = betterSqlite3("./dbs/0.sqlite");
 
 db.pragma("journal_mode = WAL");
+
+const dbCache = new LRUCache({ max: 25 });
+
+function getDbInstance(dbId) {
+  let dbInstance = dbCache.get(dbId);
+
+  if (!dbInstance) {
+    dbInstance = betterSqlite3(`dbs/${dbId}.sqlite`);
+    dbInstance.pragma("journal_mode = WAL");
+    dbCache.set(dbId, dbInstance);
+  }
+
+  return dbInstance;
+}
 
 function getAllRoutes(db) {
   return db
@@ -78,6 +94,61 @@ function applyMigrations() {
   });
 }
 
+function bootstrapContext(db, structureId, initContext) {
+  const allDbInstances = {};
+  function getDb(alias) {
+    return allDbInstances[alias];
+  }
+
+  // todo wrap template in data-bliss-edit-template thing since ws can't take us to the editor on a component basis?? maybe...
+  // for now just designing with component approach
+  const eta = getTemplater(structureId);
+
+  const libs = { eta, db: getDb };
+
+  let dbs = getDbsForStructure(db, structureId);
+  let context = vm.createContext({
+    ...initContext,
+    require: function (str) {
+      return libs[str];
+    },
+    module: { exports: null },
+  });
+  for (let appDb of dbs) {
+    let dbInstance = getDbInstance(appDb.id);
+    context.sql = dbInstance;
+    vm.runInContext(appDb.library, context);
+    allDbInstances[appDb.alias] = {
+      library: context.module.exports,
+      sql: dbInstance,
+    };
+    context.module.exports = null;
+  }
+
+  return context;
+}
+
+function routeWithPrefix(route) {
+  const prefix = route.route_prefix;
+  return prefix ? path.join(prefix, route.path) : route.path;
+}
+
+function bootstrapWebsocketHandler(route) {
+  // todo only expose app when running the handler, should not be available to the handler itself
+  // need to move to runscript or whatever
+  try {
+    const context = bootstrapContext(db, route.structure_id, { app });
+    let result = vm.runInContext(
+      route.handler + `\n\napp.ws("${routeWithPrefix(route)}", handler)`,
+      context
+    );
+    updateRoute(db, { ...route, error: null });
+    return result;
+  } catch (e) {
+    updateRoute(db, { ...route, error: e.stack });
+  }
+}
+
 function buildRoutes() {
   let newRoutes = {
     GET: [],
@@ -87,13 +158,16 @@ function buildRoutes() {
   };
 
   for (let route of getAllRoutes(db)) {
-    const prefix = route.route_prefix;
-    const p = prefix ? path.join(route.route_prefix, route.path) : route.path;
-    newRoutes[route.verb].push({
-      matcher: match(p, { decode: decodeURIComponent }),
-      id: route.id,
-      path: route.path,
-    });
+    const p = routeWithPrefix(route);
+    if (route.verb == "WS") {
+      bootstrapWebsocketHandler(route);
+    } else {
+      newRoutes[route.verb].push({
+        matcher: match(p, { decode: decodeURIComponent }),
+        id: route.id,
+        path: route.path,
+      });
+    }
   }
   routes = newRoutes;
 }
@@ -192,6 +266,7 @@ function createStructure(db, name, userId) {
 }
 
 function createRoute(db, verb, path, structureId, handler) {
+  path = encodeURI(path)
   // add default handler here
   const stmt = db.prepare(
     "INSERT INTO routes (verb, path, structure_id, handler) VALUES (?, ?, ?, ?)"
@@ -211,7 +286,14 @@ function getRoute(db, routeId) {
 }
 
 function updateRoute(db, route) {
-  const fields = ["verb", "path", "structure_id", "handler", "updated_at"];
+  const fields = [
+    "verb",
+    "path",
+    "structure_id",
+    "handler",
+    "updated_at",
+    "error",
+  ];
   const values = fields.map((field) => route[field]);
   const placeholders = fields.map((field) => `${field} = ?`).join(", ");
 
@@ -232,7 +314,6 @@ function updateDb(db, appDb) {
 
 function updateStruct(db, struct) {
   const fields = ["name", "route_prefix", "head_injection"];
-  console.log(struct, fields);
   const values = fields.map((field) => struct[field]);
   const placeholders = fields.map((field) => `${field} = ?`).join(", ");
 
@@ -358,8 +439,6 @@ function getFilesForStruct(db, structureId) {
     .prepare("SELECT * FROM files WHERE structure_id = ? ORDER BY id DESC")
     .all(structureId);
 
-  console.log(db.prepare("PRAGMA table_info(files)").all());
-
   return test;
 }
 
@@ -375,7 +454,6 @@ function createFile(db, structure_id, name, filePath, mime_type, mime_subtype) {
     .run(structure_id, name, filePath, mime_type, mime_subtype).lastInsertRowid;
 }
 
-const { LRUCache } = require("lru-cache");
 const templateCache = new LRUCache({ max: 100 });
 
 function getTemplater(structId) {
@@ -393,20 +471,6 @@ function getTemplater(structId) {
   }
 
   return etaInstance;
-}
-
-const dbCache = new LRUCache({ max: 25 });
-
-function getDbInstance(dbId) {
-  let dbInstance = dbCache.get(dbId);
-
-  if (!dbInstance) {
-    dbInstance = betterSqlite3(`dbs/${dbId}.sqlite`);
-    dbInstance.pragma("journal_mode = WAL");
-    dbCache.set(dbId, dbInstance);
-  }
-
-  return dbInstance;
 }
 
 function cloneStructure(
@@ -435,8 +499,6 @@ function cloneStructure(
 
     const toClone = new Set(cloneDbs);
     const toAlias = new Set();
-
-    console.log(toClone, dbIds);
 
     for (let { db_id } of dbIds) {
       if (!toClone.has(db_id.toString())) {
@@ -504,10 +566,13 @@ function bootstrapTemplateWithHTMXetc(
   blissClone,
   blissCopy,
   headInjection,
-  htmxRequest=false
+  htmxRequest = false
 ) {
-  if (htmlString.toLowerCase().startsWith("<html>") || htmlString.toLowerCase().startsWith("<!doctype") || !htmxRequest) {
-    console.log("grow")
+  if (
+    htmlString.toLowerCase().startsWith("<html>") ||
+    htmlString.toLowerCase().startsWith("<!doctype") ||
+    !htmxRequest
+  ) {
     const $ = cheerio.load(htmlString);
     let head = $("head");
 
@@ -516,12 +581,13 @@ function bootstrapTemplateWithHTMXetc(
       head = $("head");
     }
 
-    head.attr("id", "head")
+    head.attr("id", "head");
 
     head.append(`
         <script src="/js/hyperscript.js"></script>
         <script src="/js/tailwind.js"></script>
         <script src="/js/htmx.js"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/ws.js"></script>
         <script src="/js/bliss_inspector.js"></script>
         ${headInjection || ""}
     `);
@@ -533,14 +599,13 @@ function bootstrapTemplateWithHTMXetc(
     }
 
     htmlString = $.html();
-    console.log(htmlString)
   } else if (htmxRequest && blissRoute) {
     const $ = cheerio.load(htmlString, null, false);
     $.root().children().attr("data-bliss-route", blissRoute);
     $.root().children().attr("data-bliss-clone", blissClone);
     if (blissCopy) $.root().children().attr("data-bliss-copy", blissCopy);
-    htmlString = $.html()
-    
+    htmlString = $.html();
+
     if (htmxRequest) {
       htmlString += `<div id="head" hx-oob-swap="before_end">${headInjection}</div>`;
     }
@@ -642,14 +707,27 @@ app.get("/workshop/:structure_id/db/:db_id", (req, res) => {
 });
 
 app.post("/workshop/:structure_id/route", (req, res) => {
-  let path = req.body.path;
+  let p = req.body.path;
 
+  let dummyHandler =
+    "// put your handler code here\n\nfunction handler(req, res) {\n  res.send('henlo world') \n}";
+
+  if (req.body.verb == "WS") {
+    dummyHandler = `// put your websocket handler code here\n\nfunction handler(ws, req) {\n  ws.on('message', function(msg) {\n    ws.send(msg);\n  })\n}`;
+  }
+
+  if (p[0] == "/") {
+    p = p.substring(1);
+  }
+  if (p[p.length - 1] == "/") {
+    p = p.substring(0, p.length - 1);
+  }
   const route = createRoute(
     db,
     req.body.verb,
-    path[0] == "/" ? path : "/" + path,
+    p[0] == "/" ? p.substring(1) : "/" + p,
     req.params.structure_id,
-    "// put your handler code here\n\nfunction handler(req, res) {\n  res.send('henlo world') \n}"
+    dummyHandler
   );
   // todo optimize by only adding new, don't just rebuild all
   buildRoutes();
@@ -782,10 +860,18 @@ app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
 
 app.get("/workshop/:structure_id/route/:id", (req, res) => {
   const route = getRoute(db, req.params.id);
-  const routePrefix = getStructure(db, req.params.structure_id).route_prefix;
+  let routePrefix = getStructure(db, req.params.structure_id).route_prefix;
   let previewUrl = routePrefix
     ? path.join(routePrefix || "", route.path)
     : route.path;
+
+  console.log(previewUrl, "baba");
+  // let previewUrl = prefixUrlWithHost(
+  //   req,
+  //   routePrefix ? path.join(routePrefix.substring(1), route.path) : route.path
+  // );
+
+  console.log(previewUrl);
   return res.send(
     bootstrapTemplateWithHTMXetc(
       eta.render("workshop/route", {
@@ -873,12 +959,20 @@ app.get("/workshop/:structure_id/settings", (req, res) => {
 });
 
 app.put("/workshop/:structure_id/settings", (req, res) => {
-  console.log(req.body)
   let structId = req.params.structure_id;
   let struct = getStructure(db, structId);
+  let routePrefix = req.body.route_prefix;
+
+  if (routePrefix[0] != "/") {
+    routePrefix = "/" + routePrefix;
+  }
+  if (routePrefix[routePrefix.length - 1] == "/") {
+    routePrefix = routePrefix.substring(0, routePrefix.length - 1);
+  }
+
   updateStruct(db, {
     ...struct,
-    route_prefix: req.body.route_prefix,
+    route_prefix: routePrefix,
     head_injection: req.body.head_injection,
   });
   struct = getStructure(db, structId);
@@ -919,7 +1013,6 @@ app.get("/workshop/:structure_id/new_db_modal", (req, res) => {
 app.get("/workshop/:structure_id/clone_modal", (req, res) => {
   const structure = getStructure(db, req.params.structure_id);
   const dbs = getDbsForStructure(db, req.params.structure_id);
-  console.log(dbs);
 
   return res.send(
     bootstrapTemplateWithHTMXetc(
@@ -956,34 +1049,17 @@ app.all("*", (req, res) => {
         .prepare("SELECT * FROM routes WHERE id = ?")
         .get(routeMatch.id);
 
-      let dbs = getDbsForStructure(db, route.structure_id);
       const structure = getStructure(db, route.structure_id);
-      const __urlPrefix = structure.route_prefix
-      console.log(structure)
-
-      const allDbInstances = {};
+      const __urlPrefix = structure.route_prefix;
 
       try {
-        let context = vm.createContext({
+        // todo: only add req res to contexst when running the handler()
+        // which means moving to runscript instead of runincontext for that
+        let context = bootstrapContext(db, route.structure_id, {
           req,
           res,
           eta,
-          getDb: function (alias) {
-            return allDbInstances[alias];
-          },
-          module: { exports: null },
         });
-
-        for (let appDb of dbs) {
-          let dbInstance = getDbInstance(appDb.id);
-          context.sql = dbInstance;
-          vm.runInContext(appDb.library, context);
-          allDbInstances[appDb.alias] = {
-            library: context.module.exports,
-            sql: dbInstance,
-          };
-          context.module.exports = null;
-        }
 
         res.render = (template, context) => {
           context = context || {};

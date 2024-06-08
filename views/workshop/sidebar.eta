@@ -7,7 +7,7 @@
         <li>
           <a href="/workshop/<%= it.structure.id %>/route/<%= route.id %>">
             <%= route.verb %> -
-            <% if (it.structure.route_prefix) { %><span class="text-gray-500"><%= it.structure.route_prefix %></span><% } %><span class="bold"><%= route.path %></span>
+            <% if (it.structure.route_prefix) { %><span class="text-gray-500"><%= it.structure.route_prefix %></span><% } %><span class="bold"><%= route.path %></span><% if (route.error) { %>⚠️<% } %>
           </a>
         </li>
         <% }) %>
