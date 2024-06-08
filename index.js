@@ -231,7 +231,7 @@ function updateDb(db, appDb) {
 }
 
 function updateStruct(db, struct) {
-  const fields = ["name", "route_prefix"];
+  const fields = ["name", "route_prefix", "head_injection"];
   console.log(struct, fields);
   const values = fields.map((field) => struct[field]);
   const placeholders = fields.map((field) => `${field} = ?`).join(", ");
@@ -436,7 +436,7 @@ function cloneStructure(
     const toClone = new Set(cloneDbs);
     const toAlias = new Set();
 
-    console.log(toClone, dbIds)
+    console.log(toClone, dbIds);
 
     for (let { db_id } of dbIds) {
       if (!toClone.has(db_id.toString())) {
@@ -503,23 +503,27 @@ function bootstrapTemplateWithHTMXetc(
   blissRoute,
   blissClone,
   blissCopy,
-  wrapHTML
+  headInjection,
+  htmxRequest=false
 ) {
-  if (htmlString.startsWith("<html>") || wrapHTML) {
+  if (htmlString.toLowerCase().startsWith("<html>") || htmlString.toLowerCase().startsWith("<!doctype") || !htmxRequest) {
+    console.log("grow")
     const $ = cheerio.load(htmlString);
     let head = $("head");
 
-    // If <head> does not exist, prepend it to <html>
     if (head.length === 0) {
       $("html").prepend("<head></head>");
       head = $("head");
     }
+
+    head.attr("id", "head")
 
     head.append(`
         <script src="/js/hyperscript.js"></script>
         <script src="/js/tailwind.js"></script>
         <script src="/js/htmx.js"></script>
         <script src="/js/bliss_inspector.js"></script>
+        ${headInjection || ""}
     `);
 
     if (blissRoute) {
@@ -529,12 +533,17 @@ function bootstrapTemplateWithHTMXetc(
     }
 
     htmlString = $.html();
-  } else if (blissRoute) {
+    console.log(htmlString)
+  } else if (htmxRequest && blissRoute) {
     const $ = cheerio.load(htmlString, null, false);
     $.root().children().attr("data-bliss-route", blissRoute);
     $.root().children().attr("data-bliss-clone", blissClone);
     if (blissCopy) $.root().children().attr("data-bliss-copy", blissCopy);
-    htmlString = $.html();
+    htmlString = $.html()
+    
+    if (htmxRequest) {
+      htmlString += `<div id="head" hx-oob-swap="before_end">${headInjection}</div>`;
+    }
   }
 
   return htmlString;
@@ -765,7 +774,8 @@ app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
       null,
       null,
       null,
-      true
+      struct.head_injection,
+      false
     )
   );
 });
@@ -863,9 +873,14 @@ app.get("/workshop/:structure_id/settings", (req, res) => {
 });
 
 app.put("/workshop/:structure_id/settings", (req, res) => {
+  console.log(req.body)
   let structId = req.params.structure_id;
   let struct = getStructure(db, structId);
-  updateStruct(db, { ...struct, route_prefix: req.body.route_prefix });
+  updateStruct(db, {
+    ...struct,
+    route_prefix: req.body.route_prefix,
+    head_injection: req.body.head_injection,
+  });
   struct = getStructure(db, structId);
 
   res.send("success!");
@@ -942,7 +957,9 @@ app.all("*", (req, res) => {
         .get(routeMatch.id);
 
       let dbs = getDbsForStructure(db, route.structure_id);
-      let __urlPrefix = getStructure(db, route.structure_id).route_prefix;
+      const structure = getStructure(db, route.structure_id);
+      const __urlPrefix = structure.route_prefix
+      console.log(structure)
 
       const allDbInstances = {};
 
@@ -950,6 +967,7 @@ app.all("*", (req, res) => {
         let context = vm.createContext({
           req,
           res,
+          eta,
           getDb: function (alias) {
             return allDbInstances[alias];
           },
@@ -967,30 +985,20 @@ app.all("*", (req, res) => {
           context.module.exports = null;
         }
 
-        res.rawSend = res.send;
-        res.send = (...args) => {
-          res.rawSend(
-            bootstrapTemplateWithHTMXetc(
-              args[0],
-              `/workshop/${route.structure_id}/route/${route.id}`,
-              `/workshop/${route.structure_id}/clone_modal/`,
-              verb == "GET" ? embedHTML(req.originalUrl) : null
-            )
-          );
-        };
         res.render = (template, context) => {
           context = context || {};
           context.route = function (url) {
             return __urlPrefix ? path.join(__urlPrefix, url) : url;
           };
           const eta = getTemplater(route.structure_id);
-          console.log(route.method, "\n\n\n");
-          res.rawSend(
+          res.send(
             bootstrapTemplateWithHTMXetc(
               eta.render(template, context),
               `/workshop/${route.structure_id}/route/${route.id}`,
               `/workshop/${route.structure_id}/clone_modal/`,
-              verb == "GET" ? embedHTML(req.originalUrl) : null
+              verb == "GET" ? embedHTML(req.originalUrl) : null,
+              structure.head_injection,
+              req.headers["hx-request"]
             )
           );
         };

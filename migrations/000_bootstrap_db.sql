@@ -12,6 +12,7 @@ CREATE TABLE structures (
     name TEXT NOT NULL,
     user_id INTEGER,
     route_prefix TEXT,
+    head_injection TEXT,
     cloned_from INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

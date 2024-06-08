@@ -22,6 +22,11 @@
               <label for="name">Route Prefix</label>
               <input name="route_prefix" value="<%= it.structure.route_prefix || "" %>">
             </div>
+            <div class="field-row-stacked">
+              <label for="name"><div>&lt;head&gt;</div><div></div></label>
+              <div class="text-xs"></div>
+              <textarea name="head_injection" value="<%= it.structure.route_prefix || "" %>"><%= it.structure.head_injection || "" %></textarea>
+            </div>
             <button id="save-btn" type="submit">Save</button>
             <div id="result"></div>
           </form>
