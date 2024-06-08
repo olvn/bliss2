@@ -63,6 +63,7 @@ CREATE TABLE structure_dbs (
     PRIMARY KEY(db_id, structure_id),
     FOREIGN KEY(db_id) REFERENCES dbs(id),
     FOREIGN KEY(structure_id) REFERENCES structures(id)
+    UNIQUE(alias, structure_id)
 );
 
 CREATE TABLE files (

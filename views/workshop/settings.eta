@@ -20,7 +20,7 @@
           <form hx-put="/workshop/<%= it.structure.id %>/settings" hx-target="#result" class="p-2 flex flex-col gap-2 max-w-48">
             <div class="field-row-stacked">
               <label for="name">Route Prefix</label>
-              <input name="route_prefix" value="<%= it.structure.route_prefix %>">
+              <input name="route_prefix" value="<%= it.structure.route_prefix || "" %>">
             </div>
             <button id="save-btn" type="submit">Save</button>
             <div id="result"></div>

@@ -6,8 +6,8 @@
         <% it.routes.map(route => { %>
         <li>
           <a href="/workshop/<%= it.structure.id %>/route/<%= route.id %>">
-            <%= route.verb %> - 
-            <%= it.structure.route_prefix %><%= route.path %>
+            <%= route.verb %> -
+            <% if (it.structure.route_prefix) { %><span class="text-gray-500"><%= it.structure.route_prefix %></span><% } %><span class="bold"><%= route.path %></span>
           </a>
         </li>
         <% }) %>
@@ -46,6 +46,7 @@
         <li class="<% if (it.db?.id == db.id) { %>font-bold text-green-800<% } %>">
           <a href="/workshop/<%= it.structure.id %>/db/<%= db.id %>">
             <%= db.alias %>
+            <% if (db.is_aliased) { %>(alias)<% } %>
           </a>
         </li>
         <% }) %>

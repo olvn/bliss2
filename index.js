@@ -17,7 +17,7 @@ const PORT = 3000;
 let viewpath = path.join(__dirname, "views");
 let eta = new Eta({ views: viewpath, cache: false, autoEscape: true });
 
-const routes = { GET: [], POST: [], PUT: [], DELETE: [] };
+let routes = { GET: [], POST: [], PUT: [], DELETE: [] };
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
@@ -34,7 +34,7 @@ function getAllRoutes(db) {
     SELECT routes.*, structures.route_prefix 
     FROM routes 
     JOIN structures ON routes.structure_id = structures.id 
-    ORDER BY routes.id ASC;
+    ORDER BY routes.updated_at DESC;
   `
     )
     .all();
@@ -79,16 +79,23 @@ function applyMigrations() {
 }
 
 function buildRoutes() {
+  let newRoutes = {
+    GET: [],
+    POST: [],
+    PUT: [],
+    DELETE: [],
+  };
+
   for (let route of getAllRoutes(db)) {
     const prefix = route.route_prefix;
-    console.log(route);
     const p = prefix ? path.join(route.route_prefix, route.path) : route.path;
-    routes[route.verb].push({
+    newRoutes[route.verb].push({
       matcher: match(p, { decode: decodeURIComponent }),
       id: route.id,
       path: route.path,
     });
   }
+  routes = newRoutes;
 }
 
 applyMigrations();
@@ -273,10 +280,18 @@ function createTemplate(db, structureId, name, content, testObjectString) {
 function getDbsForStructure(db, structureId) {
   return db
     .prepare(
-      `SELECT * 
+      `SELECT
+          *,
+          CASE 
+            WHEN structure_dbs.structure_id != dbs.structure_id THEN 1
+            ELSE 0
+          END AS is_aliased,
+          structure_dbs.structure_id as alias_struct_id,
+          dbs.structure_id as db_struct_id
        FROM structure_dbs 
        INNER JOIN dbs ON structure_dbs.db_id = dbs.id 
-       WHERE structure_dbs.structure_id = ?;
+       WHERE structure_dbs.structure_id = ?
+       ORDER BY structure_dbs.created_at, is_aliased ASC;
       `
     )
     .all(structureId);
@@ -399,7 +414,7 @@ function cloneStructure(
   newStructureName,
   userId,
   routePrefix = "",
-  cloneDb = false
+  cloneDbs = []
 ) {
   const transaction = db.transaction(() => {
     const cloneStructure = db.prepare(`
@@ -414,47 +429,57 @@ function cloneStructure(
       structId
     ).lastInsertRowid;
 
-    if (cloneDb) {
-      const dbIds = db
-        .prepare(`select db_id from structure_dbs where structure_id = ?;`)
-        .all(structId);
+    const dbIds = db
+      .prepare(`select db_id from structure_dbs where structure_id = ?;`)
+      .all(structId);
 
-      for (let { db_id } of dbIds) {
-        const newDb = db
-          .prepare(
-            `
+    const toClone = new Set(cloneDbs);
+    const toAlias = new Set();
+
+    console.log(toClone, dbIds)
+
+    for (let { db_id } of dbIds) {
+      if (!toClone.has(db_id.toString())) {
+        toAlias.add(db_id.toString());
+      }
+    }
+
+    for (let db_id of toClone) {
+      const newDb = db
+        .prepare(
+          `
             INSERT INTO dbs (name, structure_id, library)
             SELECT name, ?, library FROM dbs WHERE id = ?;
             `
-          )
-          .run(newStructId, db_id).lastInsertRowid;
+        )
+        .run(newStructId, db_id).lastInsertRowid;
 
-        db.prepare(
-          `
+      db.prepare(
+        `
             INSERT INTO structure_dbs (db_id, structure_id, alias)
             SELECT ?, ?, alias FROM structure_dbs WHERE db_id = ? AND structure_id = ?;
             `
-        ).run(newDb, newStructId, db_id, structId);
+      ).run(newDb, newStructId, db_id, structId);
 
-        db.prepare(`select id from dbs where structure_id = ?`)
-          .all(newStructId)
-          .map((new_db) => {
-            console.log(db_id, new_db.id);
-            const srcPath = path.join(__dirname, "dbs", `${db_id}.sqlite`);
-            const destPath = path.join(__dirname, "dbs", `${new_db.id}.sqlite`);
-            fs.copyFileSync(srcPath, destPath);
-            fs.copyFileSync(srcPath + "-shm", destPath + "-shm");
-            fs.copyFileSync(srcPath + "-wal", destPath + "-wal");
-          });
-      }
-    } else {
+      db.prepare(`select id from dbs where structure_id = ?`)
+        .all(newStructId)
+        .map((new_db) => {
+          const srcPath = path.join(__dirname, "dbs", `${db_id}.sqlite`);
+          const destPath = path.join(__dirname, "dbs", `${new_db.id}.sqlite`);
+          fs.copyFileSync(srcPath, destPath);
+          fs.copyFileSync(srcPath + "-shm", destPath + "-shm");
+          fs.copyFileSync(srcPath + "-wal", destPath + "-wal");
+        });
+    }
+    for (let db_id of toAlias) {
       db.prepare(
         `
         INSERT INTO structure_dbs (db_id, structure_id, alias)
-        SELECT db_id, ?, alias FROM structure_dbs WHERE structure_id = ?;
+        SELECT db_id, ?, alias FROM structure_dbs WHERE structure_id = ? AND db_id = ?;
         `
-      ).run(newStructId, structId);
+      ).run(newStructId, structId, db_id);
     }
+
     const cloneTemplates = db.prepare(`
             INSERT INTO templates (name, content, structure_id, test_object, engine)
             SELECT name, content, ?, test_object, engine FROM templates WHERE structure_id = ?;
@@ -509,7 +534,6 @@ function bootstrapTemplateWithHTMXetc(
     $.root().children().attr("data-bliss-route", blissRoute);
     $.root().children().attr("data-bliss-clone", blissClone);
     if (blissCopy) $.root().children().attr("data-bliss-copy", blissCopy);
-    console.log(blissCopy, "fleem")
     htmlString = $.html();
   }
 
@@ -560,7 +584,6 @@ app.get("/workshop/:structure_id", (req, res) => {
 app.post("/workshop/:structure_id/clone", (req, res) => {
   let routePrefix = req.body.route_prefix;
   routePrefix = routePrefix[0] == "/" ? routePrefix : "/" + routePrefix;
-  const cloneDb = req.body.clone_db == "true";
   let newStructureId;
   try {
     newStructureId = cloneStructure(
@@ -569,7 +592,7 @@ app.post("/workshop/:structure_id/clone", (req, res) => {
       1,
       // req.session.userId,
       routePrefix,
-      cloneDb
+      req.body.clone_dbs
     );
     buildRoutes();
   } catch (e) {
@@ -750,14 +773,15 @@ app.get("/workshop/:structure_id/template/:template_id/preview", (req, res) => {
 app.get("/workshop/:structure_id/route/:id", (req, res) => {
   const route = getRoute(db, req.params.id);
   const routePrefix = getStructure(db, req.params.structure_id).route_prefix;
+  let previewUrl = routePrefix
+    ? path.join(routePrefix || "", route.path)
+    : route.path;
   return res.send(
     bootstrapTemplateWithHTMXetc(
       eta.render("workshop/route", {
         route: route,
         previewUrl:
-          route["verb"] == "GET"
-            ? path.join(routePrefix, route.path)
-            : "/workshop/tip",
+          route["verb"] == "GET" ? previewUrl : "/workshop/do-something-here",
         ...sidebarStuff(db, req.params.structure_id),
       })
     )
@@ -879,10 +903,14 @@ app.get("/workshop/:structure_id/new_db_modal", (req, res) => {
 
 app.get("/workshop/:structure_id/clone_modal", (req, res) => {
   const structure = getStructure(db, req.params.structure_id);
+  const dbs = getDbsForStructure(db, req.params.structure_id);
+  console.log(dbs);
+
   return res.send(
     bootstrapTemplateWithHTMXetc(
       eta.render("workshop/clone_structure_modal", {
         structure,
+        dbs,
         defaultRoutePrefix: path.join(structure.route_prefix || "", "clone"),
       })
     )
@@ -945,12 +973,13 @@ app.all("*", (req, res) => {
             bootstrapTemplateWithHTMXetc(
               args[0],
               `/workshop/${route.structure_id}/route/${route.id}`,
-              `/workshop/${route.structure_id}/clone/`,
+              `/workshop/${route.structure_id}/clone_modal/`,
               verb == "GET" ? embedHTML(req.originalUrl) : null
             )
           );
         };
         res.render = (template, context) => {
+          context = context || {};
           context.route = function (url) {
             return __urlPrefix ? path.join(__urlPrefix, url) : url;
           };

@@ -10,10 +10,13 @@
         <label class="text-xs">Route Prefix</label>
         <input name="route_prefix" id="route_prefix" type="text" value="<%= it.defaultRoutePrefix %>" />
       </div>
-      <div class="flex gap-2">
-        <input id="default-checkbox" type="checkbox" name="cloneDBs" value="true">
-        <label class="text-xs">Clone DBs</label>
-      </div>
+        <div class="text-xs">Clone DBs</div>
+        <% for (let db of it.dbs) { %>
+        <div class="flex gap-2">
+          <input id="<%= db.id %>" type="checkbox" name="clone_dbs" value="<%= db.id %>" <% if (!db.is_aliased) { %> <%= "checked" %> <% } %>>
+          <label for="<%= db.id %>" class="text-xs"><%= db.alias %> <% if (db.is_aliased) { %>(aliased)<% } %></label>
+        </div>
+        <% } %>
       <section class="flex flex-end gap-2" style="justify-content: flex-end">
         <button class="bg-green-500 rounded p-2 hover:bg-green-700 text-white" type="submit">Clone</button>
         <button class="bg-gray-400 rounded p-2 hover:bg-gray-700 text-white" type="button" _="on click trigger closeModal">Cancel</button>
